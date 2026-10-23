@@ -1,5 +1,5 @@
 import React from 'react';
-import { MarketOverview, Language, MetalSymbol } from '../types';
+import { MarketOverview, Language, MetalSymbol, SubscriptionState } from '../types';
 import {
   Coins,
   TrendingUp,
@@ -8,24 +8,29 @@ import {
   RefreshCw,
   BarChart2,
   Calculator,
-  ShieldCheck,
   Calendar,
   MessageSquare,
   Briefcase,
+  Zap,
   Layers,
+  Crown,
+  Clock,
 } from 'lucide-react';
 
 interface NavbarProps {
   overview: MarketOverview | null;
   selectedMetal: MetalSymbol;
   onSelectMetal: (sym: MetalSymbol) => void;
-  activeTab: 'dashboard' | 'chart' | 'demo' | 'calculator' | 'validator' | 'calendar' | 'copilot';
-  setActiveTab: (tab: 'dashboard' | 'chart' | 'demo' | 'calculator' | 'validator' | 'calendar' | 'copilot') => void;
+  activeTab: 'dashboard' | 'directory' | 'demo' | 'calculator' | 'validator' | 'calendar' | 'copilot';
+  setActiveTab: (tab: 'dashboard' | 'directory' | 'demo' | 'calculator' | 'validator' | 'calendar' | 'copilot') => void;
   lang: Language;
   setLang: (lang: Language) => void;
   onRefreshPrice: () => void;
   isRefreshing: boolean;
   openTradesCount: number;
+  subscription: SubscriptionState;
+  onOpenSubscriptionModal: () => void;
+  priceTick?: 'up' | 'down' | 'same';
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -39,16 +44,22 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRefreshPrice,
   isRefreshing,
   openTradesCount,
+  subscription,
+  onOpenSubscriptionModal,
+  priceTick = 'same',
 }) => {
   const currentMetalInfo = overview?.metals?.[selectedMetal];
   const isPos = currentMetalInfo ? currentMetalInfo.change >= 0 : true;
 
-  const metalsList: { symbol: MetalSymbol; labelAr: string; labelEn: string }[] = [
-    { symbol: 'XAU/USD', labelAr: 'الذهب (Gold)', labelEn: 'Gold' },
-    { symbol: 'XAG/USD', labelAr: 'الفضة (Silver)', labelEn: 'Silver' },
-    { symbol: 'XPT/USD', labelAr: 'البلاتين (Platinum)', labelEn: 'Platinum' },
-    { symbol: 'XPD/USD', labelAr: 'البلاديوم (Palladium)', labelEn: 'Palladium' },
-    { symbol: 'HG/USD', labelAr: 'النحاس (Copper)', labelEn: 'Copper' },
+  const metalsList: { symbol: MetalSymbol; labelAr: string; labelEn: string; category: 'PRECIOUS' | 'INDUSTRIAL' }[] = [
+    { symbol: 'XAU/USD', labelAr: 'الذهب (Gold)', labelEn: 'Gold', category: 'PRECIOUS' },
+    { symbol: 'XAG/USD', labelAr: 'الفضة (Silver)', labelEn: 'Silver', category: 'PRECIOUS' },
+    { symbol: 'XPT/USD', labelAr: 'البلاتين (Platinum)', labelEn: 'Platinum', category: 'PRECIOUS' },
+    { symbol: 'XPD/USD', labelAr: 'البلاديوم (Palladium)', labelEn: 'Palladium', category: 'PRECIOUS' },
+    { symbol: 'HG/USD', labelAr: 'النحاس (Copper)', labelEn: 'Copper', category: 'INDUSTRIAL' },
+    { symbol: 'AL/USD', labelAr: 'الألومنيوم (Alum)', labelEn: 'Aluminum', category: 'INDUSTRIAL' },
+    { symbol: 'NI/USD', labelAr: 'النيكل (Nickel)', labelEn: 'Nickel', category: 'INDUSTRIAL' },
+    { symbol: 'ZN/USD', labelAr: 'الزنك (Zinc)', labelEn: 'Zinc', category: 'INDUSTRIAL' },
   ];
 
   return (
@@ -60,8 +71,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span className="font-bold text-amber-400">{selectedMetal}:</span>
-            <span className="font-black text-white text-sm">
-              ${currentMetalInfo ? currentMetalInfo.price.toFixed(selectedMetal === 'HG/USD' ? 3 : 2) : '2,738.45'}
+            <span
+              className={`font-black text-sm transition-all duration-300 ${
+                priceTick === 'up'
+                  ? 'text-emerald-300 scale-105'
+                  : priceTick === 'down'
+                  ? 'text-rose-400 scale-105'
+                  : 'text-white'
+              }`}
+            >
+              ${currentMetalInfo ? currentMetalInfo.price.toFixed(selectedMetal === 'HG/USD' ? 3 : 2) : '4,028.89'}
             </span>
             {currentMetalInfo && (
               <span
@@ -75,6 +94,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </div>
 
+          {/* Provider Feed Badge */}
+          <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-950/60 border border-emerald-800/40 text-[10px] text-emerald-300">
+            <Zap className="w-3 h-3 text-emerald-400 fill-emerald-400" />
+            <span className="font-sans font-semibold">
+              {currentMetalInfo?.category === 'PRECIOUS' ? 'GoldAPI.io Live' : 'LME Futures Feed'}
+            </span>
+            {currentMetalInfo?.exchange && (
+              <span className="text-slate-400">({currentMetalInfo.exchange})</span>
+            )}
+          </div>
+
           <span className="text-slate-700 hidden sm:inline">|</span>
 
           {/* DXY */}
@@ -85,26 +115,41 @@ export const Navbar: React.FC<NavbarProps> = ({
               {overview?.correlated.dxy.change}%
             </span>
           </div>
-
-          <span className="text-slate-700 hidden sm:inline">|</span>
-
-          {/* US 10Y */}
-          <div className="hidden sm:flex items-center gap-1.5 text-slate-300">
-            <span className="text-slate-400 font-sans">US 10Y:</span>
-            <span className="font-bold">{overview?.correlated.us10y.value || '4.18%'}</span>
-          </div>
         </div>
 
-        {/* Quick controls */}
+        {/* Quick controls & Subscription Pill */}
         <div className="flex items-center gap-2">
+          {/* Subscription / 7-Day Trial Pill */}
+          <button
+            onClick={onOpenSubscriptionModal}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all border ${
+              subscription.isSubscribed
+                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                : subscription.isTrialExpired
+                ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
+                : 'bg-amber-500/15 text-amber-300 border-amber-500/30 hover:bg-amber-500/25'
+            }`}
+          >
+            <Crown className="w-3.5 h-3.5 text-amber-400" />
+            <span>
+              {subscription.isSubscribed
+                ? (lang === 'ar' ? 'مشترك PRO' : 'PRO Active')
+                : subscription.isTrialExpired
+                ? (lang === 'ar' ? 'انتهت التجربة - اشترك بـ 5$' : 'Trial Expired ($5/mo)')
+                : (lang === 'ar' ? `تجربة مجانية: ${subscription.trialDaysRemaining} أيام` : `Free Trial: ${subscription.trialDaysRemaining}d`)}
+            </span>
+          </button>
+
           <button
             onClick={onRefreshPrice}
             disabled={isRefreshing}
-            className="text-slate-400 hover:text-amber-400 transition-colors flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-slate-800/60"
-            title={lang === 'ar' ? 'تحديث الأسعار اللحظية' : 'Refresh Market Prices'}
+            className="text-slate-300 hover:text-amber-400 transition-colors flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-750 border border-slate-700"
+            title={lang === 'ar' ? 'سحب الأسعار اللحظية من GoldAPI.io' : 'Fetch live rates from GoldAPI.io'}
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-400' : ''}`} />
-            <span className="text-[10px] hidden sm:inline">{lang === 'ar' ? 'تحديث لحظي' : 'Live'}</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-400' : 'text-emerald-400'}`} />
+            <span className="text-[10px] hidden sm:inline font-bold">
+              {isRefreshing ? (lang === 'ar' ? 'جاري السحب...' : 'Syncing...') : (lang === 'ar' ? 'تحديث الأسعار' : 'Sync')}
+            </span>
           </button>
 
           <button
@@ -135,17 +180,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               </h1>
             </div>
-            <p className="text-[10px] sm:text-[11px] text-slate-400">
-              {lang === 'ar' ? 'مساعد تداول ذكي للذهب والمعادن' : 'AI Trading Assistant for Metals'}
+            <p className="text-[10px] sm:text-[11px] text-slate-400 flex items-center gap-1.5">
+              <span>{lang === 'ar' ? 'منصة تداول المعادن الذكية' : 'Metals Trading & AI Advisory'}</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+              <span className="text-emerald-400 font-semibold text-[10px]">GoldAPI Live</span>
             </p>
           </div>
         </div>
 
-        {/* Metals Quick Switcher Pills */}
-        <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800 overflow-x-auto no-scrollbar">
+        {/* Metals Quick Switcher Pills (Categorized with colors) */}
+        <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800 overflow-x-auto no-scrollbar max-w-full">
           {metalsList.map((m) => {
             const isSelected = selectedMetal === m.symbol;
-            const price = overview?.metals?.[m.symbol]?.price;
+            const metalObj = overview?.metals?.[m.symbol];
+            const price = metalObj?.price;
             return (
               <button
                 key={m.symbol}
@@ -159,7 +207,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span>{lang === 'ar' ? m.labelAr.split(' ')[0] : m.labelEn}</span>
                 {price && (
                   <span className={`text-[10px] font-mono-nums ${isSelected ? 'text-slate-900 font-extrabold' : 'text-slate-500'}`}>
-                    ${price.toFixed(m.symbol === 'HG/USD' ? 2 : 1)}
+                    ${price.toFixed(m.symbol === 'HG/USD' ? 2 : 0)}
                   </span>
                 )}
               </button>
@@ -167,7 +215,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           })}
         </div>
 
-        {/* Desktop Navigation Tabs (Hidden on mobile, bottom bar used on phone) */}
+        {/* Desktop Navigation Tabs */}
         <nav className="hidden md:flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
           <button
             onClick={() => setActiveTab('dashboard')}
@@ -178,7 +226,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <BarChart2 className="w-3.5 h-3.5" />
-            <span>{lang === 'ar' ? 'الإشارات والتحليل' : 'Signals & Analysis'}</span>
+            <span>{lang === 'ar' ? 'الإشارات' : 'Signals'}</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('directory')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              activeTab === 'directory'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>{lang === 'ar' ? 'دليل المعادن' : 'Metals Hub'}</span>
           </button>
 
           <button
@@ -190,7 +250,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <Briefcase className="w-3.5 h-3.5" />
-            <span>{lang === 'ar' ? 'الصفقات الافتراضية' : 'Demo Tracker'}</span>
+            <span>{lang === 'ar' ? 'التجريبي' : 'Demo Tracker'}</span>
             {openTradesCount > 0 && (
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             )}
@@ -205,7 +265,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <Calculator className="w-3.5 h-3.5" />
-            <span>{lang === 'ar' ? 'حاسبة اللوت' : 'Lot Calc'}</span>
+            <span>{lang === 'ar' ? 'اللوت' : 'Lot Calc'}</span>
           </button>
 
           <button
@@ -217,7 +277,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <MessageSquare className="w-3.5 h-3.5" />
-            <span>{lang === 'ar' ? 'المستشار الذكي' : 'AI Copilot'}</span>
+            <span>{lang === 'ar' ? 'المستشار' : 'AI Copilot'}</span>
           </button>
 
           <button

@@ -2,15 +2,15 @@ import React from 'react';
 import { Language } from '../types';
 import {
   BarChart2,
-  LineChart,
+  Layers,
   Briefcase,
   Calculator,
   MessageSquare,
 } from 'lucide-react';
 
 interface MobileBottomNavProps {
-  activeTab: 'dashboard' | 'chart' | 'demo' | 'calculator' | 'validator' | 'calendar' | 'copilot';
-  setActiveTab: (tab: 'dashboard' | 'chart' | 'demo' | 'calculator' | 'validator' | 'calendar' | 'copilot') => void;
+  activeTab: 'dashboard' | 'directory' | 'demo' | 'calculator' | 'validator' | 'calendar' | 'copilot';
+  setActiveTab: (tab: 'dashboard' | 'directory' | 'demo' | 'calculator' | 'validator' | 'calendar' | 'copilot') => void;
   lang: Language;
   openTradesCount: number;
 }
@@ -27,6 +27,12 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
       labelAr: 'الإشارات',
       labelEn: 'Signals',
       icon: BarChart2,
+    },
+    {
+      id: 'directory' as const,
+      labelAr: 'المعادن',
+      labelEn: 'Metals',
+      icon: Layers,
     },
     {
       id: 'demo' as const,
@@ -51,7 +57,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-950/95 border-t border-slate-800/80 backdrop-blur-lg px-2 py-2 pb-safe">
-      <div className="grid grid-cols-4 gap-1 max-w-md mx-auto">
+      <div className="grid grid-cols-5 gap-1 max-w-md mx-auto">
         {items.map((item) => {
           const isActive = activeTab === item.id;
           const Icon = item.icon;
