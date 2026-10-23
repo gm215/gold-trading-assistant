@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   MarketOverview,
   DeepAnalysisResult,
@@ -20,6 +20,7 @@ import { TradingCopilotChat } from './components/TradingCopilotChat';
 import { DemoTradingTracker } from './components/DemoTradingTracker';
 import { SubscriptionModal } from './components/SubscriptionModal';
 import { MetalsDirectory } from './components/MetalsDirectory';
+import { LuxuryGoldVaultHero } from './components/LuxuryGoldVaultHero';
 import {
   Coins,
   Crown,
@@ -68,6 +69,12 @@ export default function App() {
   const [isRefreshingPrice, setIsRefreshingPrice] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
+
+  // Live Auto-Refresh & Dynamic Tick State
+  const [priceTick, setPriceTick] = useState<'up' | 'down' | 'same'>('same');
+  const [autoRefreshActive, setAutoRefreshActive] = useState<boolean>(true);
+  const [refreshCountdown, setRefreshCountdown] = useState<number>(3);
+  const prevPriceRef = useRef<number | null>(null);
 
   // Subscription State with 7-Day Free Trial countdown
   const [subscription, setSubscription] = useState<SubscriptionState>(() => {
@@ -123,20 +130,96 @@ export default function App() {
   // Pre-filled fields for calculator when sent from signal
   const [calcParams, setCalcParams] = useState<{ entry?: string; sl?: string; tp?: string }>({});
 
+  // Process live market update and detect tick direction
+  const processMarketData = useCallback((data: MarketOverview, sym: MetalSymbol) => {
+    const liveMetal = data.metals?.[sym];
+    const newPrice = liveMetal ? liveMetal.price : data.price;
+
+    if (prevPriceRef.current !== null && newPrice !== prevPriceRef.current) {
+      setPriceTick(newPrice > prevPriceRef.current ? 'up' : 'down');
+      setTimeout(() => setPriceTick('same'), 1100);
+    }
+    prevPriceRef.current = newPrice;
+    setOverview(data);
+
+    // Auto-check open demo trades against live prices for TP / SL hits
+    setDemoAccount((prevAccount) => {
+      let updatedBalance = prevAccount.balance;
+      let hadChange = false;
+
+      const updatedTrades = prevAccount.trades.map((trade) => {
+        if (trade.status !== 'OPEN') return trade;
+
+        const tradeMetal = data.metals?.[trade.symbol];
+        if (!tradeMetal) return trade;
+
+        const currentPrice = tradeMetal.price;
+        const mult = tradeMetal.lotMultiplier;
+        const diff = trade.type === 'BUY' ? currentPrice - trade.entryPrice : trade.entryPrice - currentPrice;
+        const pnl = diff * trade.lots * mult;
+
+        // Check Take Profit hit
+        const hitTP =
+          trade.takeProfit > 0 &&
+          (trade.type === 'BUY' ? currentPrice >= trade.takeProfit : currentPrice <= trade.takeProfit);
+
+        // Check Stop Loss hit
+        const hitSL =
+          trade.stopLoss > 0 &&
+          (trade.type === 'BUY' ? currentPrice <= trade.stopLoss : currentPrice >= trade.stopLoss);
+
+        if (hitTP || hitSL) {
+          hadChange = true;
+          const exitPrice = hitTP ? trade.takeProfit : trade.stopLoss;
+          const exitDiff = trade.type === 'BUY' ? exitPrice - trade.entryPrice : trade.entryPrice - exitPrice;
+          const finalPnl = exitDiff * trade.lots * mult;
+          updatedBalance += finalPnl;
+
+          return {
+            ...trade,
+            status: 'CLOSED' as const,
+            closePrice: exitPrice,
+            closeTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            closeReason: hitTP ? ('TAKE_PROFIT' as const) : ('STOP_LOSS' as const),
+            pnlDollar: finalPnl,
+            pnlPercent: Number(((finalPnl / prevAccount.balance) * 100).toFixed(2)),
+            currentPrice: exitPrice,
+          };
+        }
+
+        return {
+          ...trade,
+          currentPrice,
+          pnlDollar: pnl,
+          pnlPercent: Number(((pnl / prevAccount.balance) * 100).toFixed(2)),
+        };
+      });
+
+      if (!hadChange) {
+        return { ...prevAccount, trades: updatedTrades };
+      }
+      return {
+        ...prevAccount,
+        balance: Number(updatedBalance.toFixed(2)),
+        trades: updatedTrades,
+      };
+    });
+  }, []);
+
   // Fetch live market overview for selected metal
   const fetchMarketOverview = useCallback(async (sym: MetalSymbol = selectedMetal, force = false) => {
     try {
-      setIsRefreshingPrice(true);
+      if (force) setIsRefreshingPrice(true);
       const url = `/api/market/gold-overview?symbol=${encodeURIComponent(sym)}${force ? '&force=true' : ''}`;
       const res = await fetch(url);
       const data = await res.json();
-      setOverview(data);
+      processMarketData(data, sym);
     } catch (err) {
       console.error('Failed to load market overview:', err);
     } finally {
-      setIsRefreshingPrice(false);
+      if (force) setIsRefreshingPrice(false);
     }
-  }, [selectedMetal]);
+  }, [selectedMetal, processMarketData]);
 
   // Fetch Deep AI Analysis for current active metal
   const fetchDeepAnalysis = useCallback(async (sym: MetalSymbol = selectedMetal, customPrice?: number) => {
@@ -167,12 +250,14 @@ export default function App() {
   // Handle metal selection
   const handleSelectMetal = (sym: MetalSymbol) => {
     setSelectedMetal(sym);
-    fetchMarketOverview(sym);
+    prevPriceRef.current = null;
+    fetchMarketOverview(sym, true);
     fetchDeepAnalysis(sym);
   };
 
   const handleAnalyzeFromDirectory = (sym: MetalSymbol) => {
     setSelectedMetal(sym);
+    prevPriceRef.current = null;
     setActiveTab('dashboard');
     fetchMarketOverview(sym, true);
     fetchDeepAnalysis(sym);
@@ -190,82 +275,22 @@ export default function App() {
     }
   }, [overview, analysis, isAnalyzing, fetchDeepAnalysis, selectedMetal]);
 
-  // Periodic subtle tick poll & auto-evaluation of demo trades TP/SL
+  // Continuous live background polling every 3 seconds (3, 2, 1, 0)
   useEffect(() => {
+    if (!autoRefreshActive) return;
+
     const timer = setInterval(() => {
-      fetch(`/api/market/gold-overview?symbol=${encodeURIComponent(selectedMetal)}`)
-        .then((r) => r.json())
-        .then((data: MarketOverview) => {
-          setOverview(data);
-
-          // Auto-check open demo trades against live prices for TP / SL hits
-          setDemoAccount((prevAccount) => {
-            let updatedBalance = prevAccount.balance;
-            let hadChange = false;
-
-            const updatedTrades = prevAccount.trades.map((trade) => {
-              if (trade.status !== 'OPEN') return trade;
-
-              const liveMetal = data.metals?.[trade.symbol];
-              if (!liveMetal) return trade;
-
-              const currentPrice = liveMetal.price;
-              const mult = liveMetal.lotMultiplier;
-              const diff = trade.type === 'BUY' ? currentPrice - trade.entryPrice : trade.entryPrice - currentPrice;
-              const pnl = diff * trade.lots * mult;
-
-              // Check Take Profit hit
-              const hitTP =
-                trade.takeProfit > 0 &&
-                (trade.type === 'BUY' ? currentPrice >= trade.takeProfit : currentPrice <= trade.takeProfit);
-
-              // Check Stop Loss hit
-              const hitSL =
-                trade.stopLoss > 0 &&
-                (trade.type === 'BUY' ? currentPrice <= trade.stopLoss : currentPrice >= trade.stopLoss);
-
-              if (hitTP || hitSL) {
-                hadChange = true;
-                const exitPrice = hitTP ? trade.takeProfit : trade.stopLoss;
-                const exitDiff = trade.type === 'BUY' ? exitPrice - trade.entryPrice : trade.entryPrice - exitPrice;
-                const finalPnl = exitDiff * trade.lots * mult;
-                updatedBalance += finalPnl;
-
-                return {
-                  ...trade,
-                  status: 'CLOSED' as const,
-                  closePrice: exitPrice,
-                  closeTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                  closeReason: hitTP ? ('TAKE_PROFIT' as const) : ('STOP_LOSS' as const),
-                  pnlDollar: finalPnl,
-                  pnlPercent: Number(((finalPnl / prevAccount.balance) * 100).toFixed(2)),
-                  currentPrice: exitPrice,
-                };
-              }
-
-              return {
-                ...trade,
-                currentPrice,
-                pnlDollar: pnl,
-                pnlPercent: Number(((pnl / prevAccount.balance) * 100).toFixed(2)),
-              };
-            });
-
-            if (!hadChange) {
-              return { ...prevAccount, trades: updatedTrades };
-            }
-            return {
-              ...prevAccount,
-              balance: Number(updatedBalance.toFixed(2)),
-              trades: updatedTrades,
-            };
-          });
-        })
-        .catch(() => {});
-    }, 7000);
+      setRefreshCountdown((prev) => {
+        if (prev <= 1) {
+          fetchMarketOverview(selectedMetal, false);
+          return 3;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
     return () => clearInterval(timer);
-  }, [selectedMetal]);
+  }, [autoRefreshActive, selectedMetal, fetchMarketOverview]);
 
   // Demo Trade Actions
   const handleOpenDemoTrade = (
@@ -421,113 +446,124 @@ export default function App() {
         openTradesCount={openTradesCount}
         subscription={subscription}
         onOpenSubscriptionModal={() => setIsSubscriptionModalOpen(true)}
+        priceTick={priceTick}
       />
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5 sm:space-y-6">
-        {/* Quick Market Overview Stats Cards */}
-        {currentMetalInfo && (
-          <section className="space-y-3">
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3">
-              {/* Spot Price */}
-              <div className="bg-slate-900/80 border border-amber-500/30 rounded-2xl p-3 shadow-lg backdrop-blur-sm">
-                <span className="text-[10px] sm:text-[11px] text-slate-400 block mb-0.5">
-                  {lang === 'ar' ? `${currentMetalInfo.nameAr} (${selectedMetal})` : `${currentMetalInfo.nameEn} Spot`}
-                </span>
-                <div className="text-lg sm:text-2xl font-black font-mono-nums text-amber-400">
-                  ${currentMetalInfo.price.toFixed(selectedMetal === 'HG/USD' ? 3 : 2)}
+        {/* Tab 1: Dashboard (Luxury 3D Gold Hero, AI Signal, Chart, Technical Radar) */}
+        {activeTab === 'dashboard' && (
+          <div className="space-y-5 sm:space-y-6">
+            {/* Luxury 3D Bullion Vault Hero Showcase */}
+            {currentMetalInfo && (
+              <LuxuryGoldVaultHero
+                metal={currentMetalInfo}
+                symbol={selectedMetal}
+                priceTick={priceTick}
+                lang={lang}
+                onQuickAnalyze={() => fetchDeepAnalysis(selectedMetal, activePrice)}
+                onQuickTrade={(act) =>
+                  handleOpenDemoTrade({
+                    symbol: selectedMetal,
+                    metalName: currentMetalInfo.nameAr,
+                    type: act,
+                    lots: 0.2,
+                    entryPrice: currentMetalInfo.price,
+                    stopLoss: act === 'BUY' ? currentMetalInfo.price * 0.994 : currentMetalInfo.price * 1.006,
+                    takeProfit: act === 'BUY' ? currentMetalInfo.price * 1.012 : currentMetalInfo.price * 0.988,
+                  })
+                }
+                autoRefreshActive={autoRefreshActive}
+                onToggleAutoRefresh={() => setAutoRefreshActive(!autoRefreshActive)}
+                refreshCountdown={refreshCountdown}
+              />
+            )}
+
+            {/* Quick Market Overview Stats Cards */}
+            {currentMetalInfo && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3">
+                {/* Spot Price */}
+                <div className="bg-slate-900/80 border border-amber-500/30 rounded-2xl p-3 shadow-lg backdrop-blur-sm">
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 block mb-0.5">
+                    {lang === 'ar' ? `${currentMetalInfo.nameAr} (${selectedMetal})` : `${currentMetalInfo.nameEn} Spot`}
+                  </span>
+                  <div
+                    className={`text-lg sm:text-2xl font-black font-mono-nums transition-all duration-300 ${
+                      priceTick === 'up'
+                        ? 'text-emerald-300 scale-105'
+                        : priceTick === 'down'
+                        ? 'text-rose-400 scale-105'
+                        : 'text-amber-400'
+                    }`}
+                  >
+                    ${currentMetalInfo.price.toFixed(selectedMetal === 'HG/USD' ? 3 : 2)}
+                  </div>
+                  <div className="text-[10px] sm:text-[11px] font-mono-nums flex items-center gap-1 mt-0.5">
+                    <span className={currentMetalInfo.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                      {currentMetalInfo.change >= 0 ? `+${currentMetalInfo.change}` : currentMetalInfo.change} ({currentMetalInfo.changePercent}%)
+                    </span>
+                  </div>
                 </div>
-                <div className="text-[10px] sm:text-[11px] font-mono-nums flex items-center gap-1 mt-0.5">
-                  <span className={currentMetalInfo.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                    {currentMetalInfo.change >= 0 ? `+${currentMetalInfo.change}` : currentMetalInfo.change} ({currentMetalInfo.changePercent}%)
+
+                {/* 24h High */}
+                <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 shadow-lg backdrop-blur-sm">
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 block mb-0.5">
+                    {lang === 'ar' ? 'أعلى سعر 24 س' : '24h High'}
+                  </span>
+                  <div className="text-base sm:text-xl font-bold font-mono-nums text-emerald-400">
+                    ${currentMetalInfo.high24h.toFixed(selectedMetal === 'HG/USD' ? 3 : 2)}
+                  </div>
+                  <span className="text-[10px] text-slate-500">
+                    {lang === 'ar' ? 'مقاومة الجلسة' : 'Session High'}
                   </span>
                 </div>
-              </div>
 
-              {/* 24h High */}
-              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 shadow-lg backdrop-blur-sm">
-                <span className="text-[10px] sm:text-[11px] text-slate-400 block mb-0.5">
-                  {lang === 'ar' ? 'أعلى سعر 24 س' : '24h High'}
-                </span>
-                <div className="text-base sm:text-xl font-bold font-mono-nums text-emerald-400">
-                  ${currentMetalInfo.high24h.toFixed(selectedMetal === 'HG/USD' ? 3 : 2)}
-                </div>
-                <span className="text-[10px] text-slate-500">
-                  {lang === 'ar' ? 'مقاومة الجلسة' : 'Session High'}
-                </span>
-              </div>
-
-              {/* 24h Low */}
-              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 shadow-lg backdrop-blur-sm">
-                <span className="text-[10px] sm:text-[11px] text-slate-400 block mb-0.5">
-                  {lang === 'ar' ? 'أدنى سعر 24 س' : '24h Low'}
-                </span>
-                <div className="text-base sm:text-xl font-bold font-mono-nums text-rose-400">
-                  ${currentMetalInfo.low24h.toFixed(selectedMetal === 'HG/USD' ? 3 : 2)}
-                </div>
-                <span className="text-[10px] text-slate-500">
-                  {lang === 'ar' ? 'قاع الجلسة' : 'Session Low'}
-                </span>
-              </div>
-
-              {/* Virtual Demo Balance Card for fast glance */}
-              <div
-                onClick={() => setActiveTab('demo')}
-                className="cursor-pointer bg-slate-900/80 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 rounded-2xl p-3 shadow-lg backdrop-blur-sm transition-all"
-              >
-                <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400 mb-0.5">
-                  <span>{lang === 'ar' ? 'محفظة التجريبي' : 'Demo Equity'}</span>
-                  <Briefcase className="w-3 h-3 text-amber-400" />
-                </div>
-                <div className="text-base sm:text-xl font-black font-mono-nums text-white">
-                  ${demoAccount.balance.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-                </div>
-                <span className="text-[10px] text-emerald-400 font-mono-nums">
-                  {openTradesCount} {lang === 'ar' ? 'صفقات نشطة' : 'Trades'}
-                </span>
-              </div>
-
-              {/* Spread and Multiplier */}
-              <div className="hidden lg:block bg-slate-900/80 border border-slate-800 rounded-2xl p-3 shadow-lg backdrop-blur-sm">
-                <span className="text-[11px] text-slate-400 block mb-0.5">
-                  {lang === 'ar' ? 'مواصفات العقد (اللوت)' : 'Lot Specifications'}
-                </span>
-                <div className="text-sm font-bold font-mono-nums text-white">
-                  1 Lot = {currentMetalInfo.lotMultiplier.toLocaleString()} {currentMetalInfo.unit.split('/')[1] || 'units'}
-                </div>
-                <span className="text-[10px] text-emerald-400 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  {currentMetalInfo.category === 'PRECIOUS' ? 'GoldAPI Live' : 'LME Global'}
-                </span>
-              </div>
-            </div>
-
-            {/* Live Gold Karats Gram Prices Strip (When Gold is selected) */}
-            {selectedMetal === 'XAU/USD' && currentMetalInfo.karats && (
-              <div className="bg-slate-950/80 border border-amber-500/20 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 text-xs font-mono-nums">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-sans font-bold text-amber-400 flex items-center gap-1">
-                    <Coins className="w-3.5 h-3.5" />
-                    {lang === 'ar' ? 'أسعار جرام الذهب المباشرة (GoldAPI):' : 'Live Gold Gram Prices (GoldAPI):'}
+                {/* 24h Low */}
+                <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 shadow-lg backdrop-blur-sm">
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 block mb-0.5">
+                    {lang === 'ar' ? 'أدنى سعر 24 س' : '24h Low'}
+                  </span>
+                  <div className="text-base sm:text-xl font-bold font-mono-nums text-rose-400">
+                    ${currentMetalInfo.low24h.toFixed(selectedMetal === 'HG/USD' ? 3 : 2)}
+                  </div>
+                  <span className="text-[10px] text-slate-500">
+                    {lang === 'ar' ? 'قاع الجلسة' : 'Session Low'}
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-3 text-slate-300 text-[11px]">
-                  <span>24K: <b className="text-amber-300 font-bold">${currentMetalInfo.karats.k24}</b></span>
-                  <span className="text-slate-600">|</span>
-                  <span>22K: <b className="text-amber-300 font-bold">${currentMetalInfo.karats.k22}</b></span>
-                  <span className="text-slate-600">|</span>
-                  <span>21K: <b className="text-amber-300 font-bold">${currentMetalInfo.karats.k21}</b></span>
-                  <span className="text-slate-600">|</span>
-                  <span>18K: <b className="text-amber-300 font-bold">${currentMetalInfo.karats.k18}</b></span>
+
+                {/* Virtual Demo Balance Card for fast glance */}
+                <div
+                  onClick={() => setActiveTab('demo')}
+                  className="cursor-pointer bg-slate-900/80 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/40 rounded-2xl p-3 shadow-lg backdrop-blur-sm transition-all"
+                >
+                  <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400 mb-0.5">
+                    <span>{lang === 'ar' ? 'محفظة التجريبي' : 'Demo Equity'}</span>
+                    <Briefcase className="w-3 h-3 text-amber-400" />
+                  </div>
+                  <div className="text-base sm:text-xl font-black font-mono-nums text-white">
+                    ${demoAccount.balance.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                  </div>
+                  <span className="text-[10px] text-emerald-400 font-mono-nums">
+                    {openTradesCount} {lang === 'ar' ? 'صفقات نشطة' : 'Trades'}
+                  </span>
+                </div>
+
+                {/* Spread and Multiplier */}
+                <div className="hidden lg:block bg-slate-900/80 border border-slate-800 rounded-2xl p-3 shadow-lg backdrop-blur-sm">
+                  <span className="text-[11px] text-slate-400 block mb-0.5">
+                    {lang === 'ar' ? 'مواصفات العقد (اللوت)' : 'Lot Specifications'}
+                  </span>
+                  <div className="text-sm font-bold font-mono-nums text-white">
+                    1 Lot = {currentMetalInfo.lotMultiplier.toLocaleString()} {currentMetalInfo.unit.split('/')[1] || 'units'}
+                  </div>
+                  <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    {currentMetalInfo.category === 'PRECIOUS' ? 'GoldAPI Live' : 'LME Global'}
+                  </span>
                 </div>
               </div>
             )}
-          </section>
-        )}
 
-        {/* Tab 1: Dashboard (AI Signal, Chart, Technical Radar) */}
-        {activeTab === 'dashboard' && (
-          <div className="space-y-5 sm:space-y-6">
             {/* AI Signal Card with Paywall Lock support */}
             <SignalCard
               analysis={analysis}

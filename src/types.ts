@@ -26,6 +26,8 @@ export interface MetalInfo {
   high24h: number;
   low24h: number;
   open24h: number;
+  bid?: number;
+  ask?: number;
   lotMultiplier: number;
   pipSize: number;
   exchange?: string;

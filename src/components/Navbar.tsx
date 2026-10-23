@@ -30,6 +30,7 @@ interface NavbarProps {
   openTradesCount: number;
   subscription: SubscriptionState;
   onOpenSubscriptionModal: () => void;
+  priceTick?: 'up' | 'down' | 'same';
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -45,6 +46,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   openTradesCount,
   subscription,
   onOpenSubscriptionModal,
+  priceTick = 'same',
 }) => {
   const currentMetalInfo = overview?.metals?.[selectedMetal];
   const isPos = currentMetalInfo ? currentMetalInfo.change >= 0 : true;
@@ -69,7 +71,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span className="font-bold text-amber-400">{selectedMetal}:</span>
-            <span className="font-black text-white text-sm">
+            <span
+              className={`font-black text-sm transition-all duration-300 ${
+                priceTick === 'up'
+                  ? 'text-emerald-300 scale-105'
+                  : priceTick === 'down'
+                  ? 'text-rose-400 scale-105'
+                  : 'text-white'
+              }`}
+            >
               ${currentMetalInfo ? currentMetalInfo.price.toFixed(selectedMetal === 'HG/USD' ? 3 : 2) : '4,028.89'}
             </span>
             {currentMetalInfo && (
