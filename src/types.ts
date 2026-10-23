@@ -44,6 +44,7 @@ export interface MetalInfo {
 export interface MarketOverview {
   symbol: MetalSymbol;
   name: string;
+  category?: MetalCategory;
   price: number;
   bid: number;
   ask: number;

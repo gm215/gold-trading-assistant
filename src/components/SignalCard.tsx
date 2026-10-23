@@ -153,7 +153,7 @@ Timeframe: ${analysis.recommendedTimeframe}`;
     >
       {/* If locked due to expired trial */}
       {isLocked && (
-        <div className="absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
+        <div className="absolute inset-0 z-30 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
           <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 mb-3">
             <Lock className="w-6 h-6" />
           </div>
@@ -162,16 +162,24 @@ Timeframe: ${analysis.recommendedTimeframe}`;
           </h4>
           <p className="text-xs text-slate-300 max-w-sm mb-4 leading-relaxed">
             {lang === 'ar'
-              ? 'لمتابعة استلام توصيات الذكاء الاصطناعي الحية وتفاصيل الدخول والوقف لجميع المعادن، اشترك الآن بـ 5$ شهرياً.'
-              : 'Subscribe to GoldAdvisor PRO for only $5/month to continue receiving live AI trading signals and stop-loss targets.'}
+              ? 'لمتابعة استلام توصيات الذكاء الاصطناعي الحية وتفاصيل الدخول والوقف لجميع المعادن، يمكنك الاشتراك بـ 5$ شهرياً أو إعادة تفعيل الفترة التجريبية للاختبار.'
+              : 'Subscribe to GoldAdvisor PRO for only $5/month or renew your free trial to test.'}
           </p>
-          <button
-            onClick={onOpenSubscriptionModal}
-            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/25 flex items-center gap-2 hover:from-amber-400 hover:to-yellow-300 transition-all active:scale-95"
-          >
-            <Crown className="w-4 h-4" />
-            <span>{lang === 'ar' ? 'الاشتراك الآن (5$ شهرياً)' : 'Upgrade to PRO ($5/mo)'}</span>
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={onOpenSubscriptionModal}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/25 flex items-center gap-2 hover:from-amber-400 hover:to-yellow-300 transition-all active:scale-95 cursor-pointer"
+            >
+              <Crown className="w-4 h-4" />
+              <span>{lang === 'ar' ? 'الاشتراك الآن (5$ شهرياً)' : 'Upgrade to PRO ($5/mo)'}</span>
+            </button>
+            <button
+              onClick={onOpenSubscriptionModal}
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 text-xs font-bold transition-all cursor-pointer"
+            >
+              {lang === 'ar' ? 'خيارات الاشتراك والتجربة' : 'Subscription Options'}
+            </button>
+          </div>
         </div>
       )}
 

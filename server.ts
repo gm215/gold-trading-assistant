@@ -14,6 +14,15 @@ const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
+// Anti-cache middleware for all API routes so prices never freeze in browser
+app.use('/api', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+  next();
+});
+
 // Initialize Gemini SDK
 const apiKey = process.env.GEMINI_API_KEY || '';
 const ai = new GoogleGenAI({
@@ -26,11 +35,38 @@ const ai = new GoogleGenAI({
 });
 
 // Fast timeout wrapper to prevent Gemini API from hanging when throttled
-function callWithTimeout<T>(promise: Promise<T>, ms = 2500): Promise<T> {
+function callWithTimeout<T>(promise: Promise<T>, ms = 4000): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) => setTimeout(() => reject(new Error('AI Request timeout')), ms)),
   ]);
+}
+
+// Resilient Gemini Generator with automatic model cascade (gemini-3.1-flash-lite -> gemini-3.8-flash)
+async function generateWithGemini(options: { contents: any; config?: any }) {
+  if (!apiKey) {
+    throw new Error('No GEMINI_API_KEY available');
+  }
+  const models = ['gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+  let lastError: any = null;
+  for (const model of models) {
+    try {
+      const res = await callWithTimeout(
+        ai.models.generateContent({
+          ...options,
+          model,
+        }),
+        3500
+      );
+      if (res && res.text) {
+        return { res, modelUsed: model };
+      }
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`Gemini model ${model} temporarily unavailable:`, err?.status || err?.message || err);
+    }
+  }
+  throw lastError || new Error('All Gemini models unavailable');
 }
 
 // User's verified GoldAPI key
@@ -814,16 +850,12 @@ app.post('/api/ai/deep-analysis', async (req, res) => {
   "warnings": ["..."]
 }`;
 
-      const response = await callWithTimeout(
-        ai.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: prompt,
-          config: {
-            responseMimeType: 'application/json',
-          },
-        }),
-        2500
-      );
+      const { res: response, modelUsed } = await generateWithGemini({
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+        },
+      });
 
       const rawText = response.text || '{}';
       let parsedData;
@@ -842,7 +874,7 @@ app.post('/api/ai/deep-analysis', async (req, res) => {
           analysis: parsedData,
           analyzedAt: new Date().toISOString(),
           currentPrice: priceToAnalyze,
-          source: 'GEMINI_AI',
+          source: modelUsed,
         });
       }
     } catch (err: any) {
@@ -895,16 +927,12 @@ app.post('/api/ai/chat', async (req, res) => {
         }
       }
 
-      const response = await callWithTimeout(
-        ai.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: contents,
-          config: {
-            systemInstruction: systemPrompt,
-          },
-        }),
-        2500
-      );
+      const { res: response } = await generateWithGemini({
+        contents: contents,
+        config: {
+          systemInstruction: systemPrompt,
+        },
+      });
 
       if (response.text) {
         return res.json({ reply: response.text });
@@ -965,8 +993,7 @@ app.post('/api/ai/evaluate-trade-plan', async (req, res) => {
   "riskVerdict": "حكم نهائي صريح على ملاءمة الصفقة"
 }`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+      const { res: response } = await generateWithGemini({
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
