@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --gold-primary: #eab308;
+    --gold-light: #fef08a;
+    --gold-dark: #a16207;
+    --bg-dark: #080c14;
+    --card-dark: #0f172a;
+    --border-dark: #1e293b;
+  }
+
+  body {
+    background-color: #080c14;
+    color: #f1f5f9;
+    font-family: 'Cairo', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* Monospace for prices and numbers */
+  .font-mono-nums {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Custom scrollbars for trading panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0b1120;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Metallic gold gradient text */
+.text-gold-gradient {
+  background: linear-gradient(135deg, #fef08a 0%, #eab308 50%, #ca8a04 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gold-glow {
+  box-shadow: 0 0 25px -5px rgba(234, 179, 8, 0.25);
+}
+
+.profit-glow {
+  box-shadow: 0 0 20px -3px rgba(16, 185, 129, 0.3);
+}
+
+.loss-glow {
+  box-shadow: 0 0 20px -3px rgba(239, 68, 68, 0.3);
+}
+
+/* Blinking live ticker pulse */
+@keyframes ticker-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.9); }
+}
+
+.animate-ticker {
+  animation: ticker-pulse 2s infinite ease-in-out;
+}

@@ -1,0 +1,6 @@
+{
+  "name": "GoldAdvisor AI - مستشار تداول الذهب بالذكاء الاصطناعي",
+  "description": "منصة استشارية متطورة لتحليل وتداول الذهب (XAU/USD) مدعومة بالذكاء الاصطناعي مع تحليلات فنية دقيقة وإشارات تداول حية وحاسبة متقدمة لإدارة المخاطر.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
