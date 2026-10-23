@@ -18,6 +18,8 @@ import {
   Briefcase,
   Layers,
   HelpCircle,
+  Lock,
+  Crown,
 } from 'lucide-react';
 
 interface SignalCardProps {
@@ -27,6 +29,8 @@ interface SignalCardProps {
   lang: Language;
   onApplyToCalculator: (entry: string, sl: string, tp: string) => void;
   onExecuteInDemoTracker: (analysis: DeepAnalysisResult) => void;
+  isLocked?: boolean;
+  onOpenSubscriptionModal?: () => void;
 }
 
 export const SignalCard: React.FC<SignalCardProps> = ({
@@ -36,6 +40,8 @@ export const SignalCard: React.FC<SignalCardProps> = ({
   lang,
   onApplyToCalculator,
   onExecuteInDemoTracker,
+  isLocked = false,
+  onOpenSubscriptionModal,
 }) => {
   const [copied, setCopied] = useState(false);
   const [showDetails, setShowDetails] = useState(true);
@@ -145,6 +151,30 @@ Timeframe: ${analysis.recommendedTimeframe}`;
           : 'border-amber-500/30'
       }`}
     >
+      {/* If locked due to expired trial */}
+      {isLocked && (
+        <div className="absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 mb-3">
+            <Lock className="w-6 h-6" />
+          </div>
+          <h4 className="text-base sm:text-lg font-black text-white mb-1">
+            {lang === 'ar' ? 'انتهت الفترة التجريبية المجانية (7 أيام)' : '7-Day Free Trial Expired'}
+          </h4>
+          <p className="text-xs text-slate-300 max-w-sm mb-4 leading-relaxed">
+            {lang === 'ar'
+              ? 'لمتابعة استلام توصيات الذكاء الاصطناعي الحية وتفاصيل الدخول والوقف لجميع المعادن، اشترك الآن بـ 5$ شهرياً.'
+              : 'Subscribe to GoldAdvisor PRO for only $5/month to continue receiving live AI trading signals and stop-loss targets.'}
+          </p>
+          <button
+            onClick={onOpenSubscriptionModal}
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/25 flex items-center gap-2 hover:from-amber-400 hover:to-yellow-300 transition-all active:scale-95"
+          >
+            <Crown className="w-4 h-4" />
+            <span>{lang === 'ar' ? 'الاشتراك الآن (5$ شهرياً)' : 'Upgrade to PRO ($5/mo)'}</span>
+          </button>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
         <div className="flex items-center gap-3">

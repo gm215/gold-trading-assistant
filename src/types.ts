@@ -2,12 +2,23 @@ export type Language = 'ar' | 'en';
 
 export type SignalType = 'BUY' | 'SELL' | 'HOLD';
 
-export type MetalSymbol = 'XAU/USD' | 'XAG/USD' | 'XPT/USD' | 'XPD/USD' | 'HG/USD';
+export type MetalCategory = 'PRECIOUS' | 'INDUSTRIAL';
+
+export type MetalSymbol =
+  | 'XAU/USD' // Gold
+  | 'XAG/USD' // Silver
+  | 'XPT/USD' // Platinum
+  | 'XPD/USD' // Palladium
+  | 'HG/USD'  // Copper
+  | 'AL/USD'  // Aluminum
+  | 'NI/USD'  // Nickel
+  | 'ZN/USD';  // Zinc
 
 export interface MetalInfo {
   symbol: MetalSymbol;
   nameEn: string;
   nameAr: string;
+  category: MetalCategory;
   unit: string;
   price: number;
   change: number;
@@ -15,8 +26,17 @@ export interface MetalInfo {
   high24h: number;
   low24h: number;
   open24h: number;
-  lotMultiplier: number; // e.g. 100 for Gold, 5000 for Silver, 100 for Platinum
+  lotMultiplier: number;
   pipSize: number;
+  exchange?: string;
+  industrialUseAr?: string;
+  industrialUseEn?: string;
+  karats?: {
+    k24: number;
+    k22: number;
+    k21: number;
+    k18: number;
+  };
 }
 
 export interface MarketOverview {
@@ -32,6 +52,9 @@ export interface MarketOverview {
   open24h: number;
   volumeOz: string;
   timestamp: string;
+  provider: string;
+  isLiveAPI: boolean;
+  lastLiveSync: string;
   metals: Record<MetalSymbol, MetalInfo>;
   correlated: {
     dxy: { name: string; value: number; change: number };
@@ -148,4 +171,13 @@ export interface DemoAccount {
   balance: number;
   initialDeposit: number;
   trades: DemoTrade[];
+}
+
+// Subscription & 7-Day Trial State
+export interface SubscriptionState {
+  isSubscribed: boolean;
+  trialStartDate: string;
+  trialDaysRemaining: number;
+  isTrialExpired: boolean;
+  plan: 'FREE_TRIAL' | 'PRO_MONTHLY';
 }
