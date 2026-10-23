@@ -7,6 +7,7 @@ import {
   DemoAccount,
   DemoTrade,
   SubscriptionState,
+  UserProfile,
 } from './types';
 import { Navbar } from './components/Navbar';
 import { MobileBottomNav } from './components/MobileBottomNav';
@@ -19,6 +20,7 @@ import { EconomicCalendar } from './components/EconomicCalendar';
 import { TradingCopilotChat } from './components/TradingCopilotChat';
 import { DemoTradingTracker } from './components/DemoTradingTracker';
 import { SubscriptionModal } from './components/SubscriptionModal';
+import { AuthModal } from './components/AuthModal';
 import { MetalsDirectory } from './components/MetalsDirectory';
 import { LuxuryGoldVaultHero } from './components/LuxuryGoldVaultHero';
 import {
@@ -162,17 +164,17 @@ const DEFAULT_MARKET_OVERVIEW: MarketOverview = {
       nameAr: 'عقود النحاس',
       category: 'INDUSTRIAL',
       unit: 'USD / lb',
-      price: 4.885,
-      change: 0.045,
-      changePercent: 0.93,
-      high24h: 4.950,
-      low24h: 4.810,
-      open24h: 4.840,
-      bid: 4.880,
-      ask: 4.890,
+      price: 4.925,
+      change: 0.020,
+      changePercent: 0.41,
+      high24h: 4.985,
+      low24h: 4.880,
+      open24h: 4.905,
+      bid: 4.920,
+      ask: 4.930,
       lotMultiplier: 25000,
       pipSize: 0.001,
-      exchange: 'COMEX',
+      exchange: 'COMEX / LME ($14,495/t)',
       industrialUseAr: 'مؤشر صحة الاقتصاد العالمي (دكتور نحاس)، شبكات نقل الكهرباء، محركات الطاقة المتجددة.',
     },
     'AL/USD': {
@@ -181,17 +183,17 @@ const DEFAULT_MARKET_OVERVIEW: MarketOverview = {
       nameAr: 'الألومنيوم',
       category: 'INDUSTRIAL',
       unit: 'USD / ton',
-      price: 2680.00,
-      change: 15.00,
-      changePercent: 0.56,
-      high24h: 2710.00,
-      low24h: 2655.00,
-      open24h: 2665.00,
-      bid: 2678.00,
-      ask: 2682.00,
+      price: 3021.50,
+      change: 9.50,
+      changePercent: 0.32,
+      high24h: 3045.00,
+      low24h: 2998.00,
+      open24h: 3012.00,
+      bid: 3020.00,
+      ask: 3023.00,
       lotMultiplier: 25,
-      pipSize: 1.0,
-      exchange: 'LME',
+      pipSize: 0.5,
+      exchange: 'LME Official',
       industrialUseAr: 'هياكل الطائرات وصناعة الطيران، هياكل السيارات خفيفة الوزن، التغليف، وقطاع الإنشاءات.',
     },
     'NI/USD': {
@@ -200,17 +202,17 @@ const DEFAULT_MARKET_OVERVIEW: MarketOverview = {
       nameAr: 'النيكل',
       category: 'INDUSTRIAL',
       unit: 'USD / ton',
-      price: 16450.00,
-      change: 70.00,
-      changePercent: 0.43,
-      high24h: 16720.00,
-      low24h: 16290.00,
-      open24h: 16380.00,
-      bid: 16440.00,
-      ask: 16460.00,
+      price: 15265.00,
+      change: 55.00,
+      changePercent: 0.36,
+      high24h: 15480.00,
+      low24h: 15120.00,
+      open24h: 15210.00,
+      bid: 15255.00,
+      ask: 15275.00,
       lotMultiplier: 6,
       pipSize: 5.0,
-      exchange: 'LME',
+      exchange: 'LME Official',
       industrialUseAr: 'المكون الرئيسي لبطاريات الليثيوم للسيارات الكهربائية، وإنتاج الفولاذ المقاوم للصدأ.',
     },
     'ZN/USD': {
@@ -219,17 +221,17 @@ const DEFAULT_MARKET_OVERVIEW: MarketOverview = {
       nameAr: 'الزنك',
       category: 'INDUSTRIAL',
       unit: 'USD / ton',
-      price: 2985.00,
+      price: 3775.00,
       change: 15.00,
-      changePercent: 0.51,
-      high24h: 3020.00,
-      low24h: 2960.00,
-      open24h: 2970.00,
-      bid: 2982.00,
-      ask: 2988.00,
+      changePercent: 0.40,
+      high24h: 3810.00,
+      low24h: 3740.00,
+      open24h: 3760.00,
+      bid: 3772.00,
+      ask: 3778.00,
       lotMultiplier: 25,
       pipSize: 1.0,
-      exchange: 'LME',
+      exchange: 'LME Official',
       industrialUseAr: 'جلفنة الحديد لحمايته من الصدأ، صناعة بطاريات الزنك الحديثة، وسبائك الصب الدقيق.',
     },
   },
@@ -288,6 +290,64 @@ export default function App() {
   const [isRefreshingPrice, setIsRefreshingPrice] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  // User Profile Account (Persisted across sessions with email, password, phone)
+  const [user, setUser] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem('gold_advisor_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const handleLogin = (profile: UserProfile & { trades?: DemoTrade[] }) => {
+    setUser(profile);
+    try {
+      localStorage.setItem('gold_advisor_user', JSON.stringify(profile));
+    } catch (e) {
+      console.error(e);
+    }
+    // Restore user cloud portfolio if available
+    if (profile.balance !== undefined) {
+      setDemoAccount((prev) => ({
+        ...prev,
+        balance: profile.balance ?? prev.balance,
+        trades: Array.isArray(profile.trades) ? profile.trades : prev.trades,
+      }));
+    }
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    try {
+      localStorage.removeItem('gold_advisor_user');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // Cloud sync on startup if user was previously remembered
+  useEffect(() => {
+    if (user?.email) {
+      fetch(`/api/auth/profile?email=${encodeURIComponent(user.email)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.success && data.user) {
+            setUser((prev) => ({ ...(prev || {}), ...data.user, isLoggedIn: true }));
+            if (typeof data.user.balance === 'number') {
+              setDemoAccount((prev) => ({
+                ...prev,
+                balance: data.user.balance,
+                trades: Array.isArray(data.user.trades) ? data.user.trades : prev.trades,
+              }));
+            }
+          }
+        })
+        .catch((err) => console.warn('Could not sync cloud profile on mount:', err));
+    }
+  }, []);
 
   // Live Auto-Refresh & Dynamic Tick State
   const [priceTick, setPriceTick] = useState<'up' | 'down' | 'same'>('same');
@@ -340,10 +400,22 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem('gold_advisor_demo_account', JSON.stringify(demoAccount));
+      if (user?.email && user?.isLoggedIn) {
+        fetch('/api/auth/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: user.email,
+            uid: user.uid,
+            balance: demoAccount.balance,
+            trades: demoAccount.trades,
+          }),
+        }).catch(() => {});
+      }
     } catch (e) {
       console.error(e);
     }
-  }, [demoAccount]);
+  }, [demoAccount, user?.email, user?.isLoggedIn, user?.uid]);
 
   // Pre-filled fields for calculator when sent from signal
   const [calcParams, setCalcParams] = useState<{ entry?: string; sl?: string; tp?: string }>({});
@@ -705,6 +777,8 @@ export default function App() {
         subscription={subscription}
         onOpenSubscriptionModal={() => setIsSubscriptionModalOpen(true)}
         priceTick={priceTick}
+        user={user}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
       />
 
       {/* Main Container */}
@@ -980,6 +1054,16 @@ export default function App() {
         onActivateSubscription={handleActivateSubscription}
         onResetTrial={handleResetTrial}
         onSimulateExpiredTrial={handleSimulateExpiredTrial}
+        lang={lang}
+      />
+
+      {/* Cloud User Profile & Authentication Modal (Email, Password, Phone) */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        user={user}
+        onLogin={handleLogin}
+        onLogout={handleLogout}
         lang={lang}
       />
 

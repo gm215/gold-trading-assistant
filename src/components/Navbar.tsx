@@ -1,5 +1,5 @@
 import React from 'react';
-import { MarketOverview, Language, MetalSymbol, SubscriptionState } from '../types';
+import { MarketOverview, Language, MetalSymbol, SubscriptionState, UserProfile } from '../types';
 import {
   Coins,
   TrendingUp,
@@ -15,6 +15,8 @@ import {
   Layers,
   Crown,
   Clock,
+  User,
+  ShieldCheck,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -31,6 +33,8 @@ interface NavbarProps {
   subscription: SubscriptionState;
   onOpenSubscriptionModal: () => void;
   priceTick?: 'up' | 'down' | 'same';
+  user: UserProfile | null;
+  onOpenAuthModal: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -47,6 +51,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   subscription,
   onOpenSubscriptionModal,
   priceTick = 'same',
+  user,
+  onOpenAuthModal,
 }) => {
   const currentMetalInfo = overview?.metals?.[selectedMetal];
   const isPos = currentMetalInfo ? currentMetalInfo.change >= 0 : true;
@@ -164,27 +170,63 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Main Navbar Bar */}
       <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3">
-        {/* Brand Logo */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-600 p-0.5 shadow-lg shadow-amber-500/25 shrink-0">
-            <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
-              <Coins className="w-5 h-5 text-amber-400" />
+        {/* Brand Logo & Mobile Quick Controls */}
+        <div className="flex items-center justify-between w-full md:w-auto gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-600 p-0.5 shadow-lg shadow-amber-500/25 shrink-0">
+              <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
+                <Coins className="w-5 h-5 text-amber-400" />
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <h1 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-1.5">
+                  <span>GoldAdvisor</span>
+                  <span className="text-amber-400 font-extrabold text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 border border-amber-500/20">
+                    AI PRO
+                  </span>
+                </h1>
+              </div>
+              <p className="text-[10px] sm:text-[11px] text-slate-400 flex items-center gap-1.5">
+                <span>{lang === 'ar' ? 'منصة تداول المعادن الذكية' : 'Metals Trading & AI Advisory'}</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                <span className="text-emerald-400 font-semibold text-[10px]">LME & GoldAPI</span>
+              </p>
             </div>
           </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <h1 className="text-base sm:text-lg font-black tracking-tight text-white flex items-center gap-1.5">
-                <span>GoldAdvisor</span>
-                <span className="text-amber-400 font-extrabold text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 border border-amber-500/20">
-                  AI PRO
-                </span>
-              </h1>
-            </div>
-            <p className="text-[10px] sm:text-[11px] text-slate-400 flex items-center gap-1.5">
-              <span>{lang === 'ar' ? 'منصة تداول المعادن الذكية' : 'Metals Trading & AI Advisory'}</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-              <span className="text-emerald-400 font-semibold text-[10px]">GoldAPI Live</span>
-            </p>
+
+          {/* High-Visibility Language Switcher & Account Button for Mobile & Desktop */}
+          <div className="flex items-center gap-2">
+            {/* Direct Language Switcher (Always accessible on iPhones / Android / PC without scrolling) */}
+            <button
+              onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-850 hover:bg-slate-800 text-amber-300 border border-amber-500/40 text-xs font-black flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+              title={lang === 'ar' ? 'Switch to English' : 'التحويل إلى اللغة العربية'}
+            >
+              <Globe2 className="w-3.5 h-3.5 text-amber-400" />
+              <span>{lang === 'ar' ? 'English' : 'عربي'}</span>
+            </button>
+
+            {/* User Account / Login Button */}
+            <button
+              onClick={onOpenAuthModal}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                user?.isLoggedIn
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 shadow-sm'
+                  : 'bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/30'
+              }`}
+              title={lang === 'ar' ? 'ربط الحساب بالإيميل ورقم الهاتف' : 'User Account & Cloud Sync'}
+            >
+              <User className="w-3.5 h-3.5 text-amber-400" />
+              <span className="max-w-[90px] truncate">
+                {user?.isLoggedIn
+                  ? user.displayName.split(' ')[0]
+                  : lang === 'ar' ? 'تسجيل دخول' : 'Sign In'}
+              </span>
+              {user?.isLoggedIn && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              )}
+            </button>
           </div>
         </div>
 

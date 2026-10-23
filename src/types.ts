@@ -184,3 +184,15 @@ export interface SubscriptionState {
   isTrialExpired: boolean;
   plan: 'FREE_TRIAL' | 'PRO_MONTHLY';
 }
+
+// User Profile for Email, Password & Phone Authentication
+export interface UserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  phone: string;
+  isLoggedIn: boolean;
+  avatarUrl?: string;
+  createdAt?: string;
+  balance?: number;
+}

@@ -1,6 +1,8 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 
@@ -174,23 +176,23 @@ const metalsState: Record<string, any> = {
     industrialUseEn: 'Automotive gasoline exhaust catalysis, multilayer ceramic capacitors, and hydrogen purification.',
   },
 
-  // --- INDUSTRIAL & BASE METALS ---
+  // --- INDUSTRIAL & BASE METALS (Official LME & COMEX Benchmarks) ---
   'HG/USD': {
     symbol: 'HG/USD',
     nameEn: 'Copper Futures',
     nameAr: 'عقود النحاس',
     category: 'INDUSTRIAL',
     unit: 'USD / lb',
-    price: 4.885,
-    anchorPrice: 4.885,
-    high24h: 4.950,
-    low24h: 4.810,
-    open24h: 4.840,
-    change: 0.045,
-    changePercent: 0.93,
-    bid: 4.880,
-    ask: 4.890,
-    exchange: 'COMEX',
+    price: 4.925,
+    anchorPrice: 4.925,
+    high24h: 4.985,
+    low24h: 4.880,
+    open24h: 4.905,
+    change: 0.020,
+    changePercent: 0.41,
+    bid: 4.920,
+    ask: 4.930,
+    exchange: 'COMEX / LME ($14,495/t)',
     lotMultiplier: 25000,
     pipSize: 0.001,
     tickDecimals: 3,
@@ -204,18 +206,18 @@ const metalsState: Record<string, any> = {
     nameAr: 'الألومنيوم',
     category: 'INDUSTRIAL',
     unit: 'USD / ton',
-    price: 2680.00,
-    anchorPrice: 2680.00,
-    high24h: 2710.00,
-    low24h: 2655.00,
-    open24h: 2665.00,
-    change: 15.00,
-    changePercent: 0.56,
-    bid: 2678.00,
-    ask: 2682.00,
-    exchange: 'LME',
+    price: 3021.50,
+    anchorPrice: 3021.50,
+    high24h: 3045.00,
+    low24h: 2998.00,
+    open24h: 3012.00,
+    change: 9.50,
+    changePercent: 0.32,
+    bid: 3020.00,
+    ask: 3023.00,
+    exchange: 'LME Official',
     lotMultiplier: 25,
-    pipSize: 1.0,
+    pipSize: 0.5,
     tickDecimals: 1,
     tickRange: 1.5,
     industrialUseAr: 'هياكل الطائرات وصناعة الطيران، هياكل السيارات خفيفة الوزن، التغليف، وقطاع الإنشاءات.',
@@ -227,16 +229,16 @@ const metalsState: Record<string, any> = {
     nameAr: 'النيكل',
     category: 'INDUSTRIAL',
     unit: 'USD / ton',
-    price: 16450.00,
-    anchorPrice: 16450.00,
-    high24h: 16720.00,
-    low24h: 16290.00,
-    open24h: 16380.00,
-    change: 70.00,
-    changePercent: 0.43,
-    bid: 16440.00,
-    ask: 16460.00,
-    exchange: 'LME',
+    price: 15265.00,
+    anchorPrice: 15265.00,
+    high24h: 15480.00,
+    low24h: 15120.00,
+    open24h: 15210.00,
+    change: 55.00,
+    changePercent: 0.36,
+    bid: 15255.00,
+    ask: 15275.00,
+    exchange: 'LME Official',
     lotMultiplier: 6,
     pipSize: 5.0,
     tickDecimals: 0,
@@ -250,16 +252,16 @@ const metalsState: Record<string, any> = {
     nameAr: 'الزنك',
     category: 'INDUSTRIAL',
     unit: 'USD / ton',
-    price: 2985.00,
-    anchorPrice: 2985.00,
-    high24h: 3020.00,
-    low24h: 2960.00,
-    open24h: 2970.00,
+    price: 3775.00,
+    anchorPrice: 3775.00,
+    high24h: 3810.00,
+    low24h: 3740.00,
+    open24h: 3760.00,
     change: 15.00,
-    changePercent: 0.51,
-    bid: 2982.00,
-    ask: 2988.00,
-    exchange: 'LME',
+    changePercent: 0.40,
+    bid: 3772.00,
+    ask: 3778.00,
+    exchange: 'LME Official',
     lotMultiplier: 25,
     pipSize: 1.0,
     tickDecimals: 1,
@@ -273,22 +275,29 @@ const metalsState: Record<string, any> = {
 const cacheTimestamps: Record<string, number> = {};
 const CACHE_DURATION_MS = 30 * 1000; // 30 seconds cache for external API
 
-// Real-Time Micro-Tick Engine: generates realistic live order flow oscillations around the GoldAPI anchor
+// Real-Time Micro-Tick Engine: generates realistic live order flow oscillations around the market anchor
 function applyLiveMarketTick(metal: any) {
   const decimals = metal.tickDecimals ?? 2;
-  const range = metal.tickRange || metal.price * 0.0001;
+  const minStep = Math.pow(10, -decimals);
   const anchor = metal.anchorPrice || metal.price;
 
-  // Realistic random micro delta: positive or negative tick
-  const rawDelta = (Math.random() * 2 - 1) * range;
+  // Ensure price definitely moves by at least 1 unit in decimals (pip)
+  const direction = Math.random() > 0.49 ? 1 : -1;
+  const stepCount = Math.floor(Math.random() * 4) + 1;
+  const rawDelta = direction * (minStep * stepCount);
   let candidatePrice = metal.price + rawDelta;
 
-  // Keep price tethered within ±0.25% of the real GoldAPI anchor
+  // Keep price tethered within ±0.25% of the real anchor
   const maxDeviation = anchor * 0.0025;
   if (candidatePrice > anchor + maxDeviation) {
-    candidatePrice = anchor + maxDeviation - Math.random() * range;
+    candidatePrice = anchor + maxDeviation - (minStep * 2);
   } else if (candidatePrice < anchor - maxDeviation) {
-    candidatePrice = anchor - maxDeviation + Math.random() * range;
+    candidatePrice = anchor - maxDeviation + (minStep * 2);
+  }
+
+  // Guarantee candidatePrice differs from current price
+  if (candidatePrice === metal.price) {
+    candidatePrice = Number((metal.price + (direction * minStep)).toFixed(decimals));
   }
 
   metal.price = Number(candidatePrice.toFixed(decimals));
@@ -298,7 +307,7 @@ function applyLiveMarketTick(metal: any) {
   metal.changePercent = Number(((metal.change / metal.open24h) * 100).toFixed(2));
 
   // Compute live Bid and Ask with realistic spread
-  const halfSpread = (metal.price * 0.00008) || (metal.pipSize * 0.8);
+  const halfSpread = (metal.price * 0.00008) || (metal.pipSize * 0.8) || minStep;
   metal.bid = Number((metal.price - halfSpread).toFixed(decimals));
   metal.ask = Number((metal.price + halfSpread).toFixed(decimals));
 
@@ -689,6 +698,258 @@ function generateQuantitativeAIChatReply(userPrompt: string, metal: any, price: 
 • مؤشر القوة النسبية RSI: ${indicators.rsi} (${indicators.rsi > 50 ? 'زخم إيجابي' : 'زخم تراجعي'}).
 نوصي بالتداول مع الاتجاه الصاعد طالما يتداول السعر أعلى نقطة الارتكاز $${pp}. هل تريد تقييم خطة صفقة معينة؟`;
 }
+
+// ---------------------------------------------------------------------------------
+// PERSISTENT USER DATABASE & AUTHENTICATION (Cross-device phone & email sync)
+// ---------------------------------------------------------------------------------
+const DATA_DIR = path.join(__dirname, 'data');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+
+// Ensure data directory exists
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch (e) {
+  console.error('Failed to create data dir:', e);
+}
+
+interface StoredUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  phone: string;
+  passwordHash: string;
+  salt: string;
+  balance: number;
+  trades: any[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+function getUsersDb(): Record<string, StoredUser> {
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      const data = fs.readFileSync(USERS_FILE, 'utf-8');
+      return JSON.parse(data || '{}');
+    }
+  } catch (err) {
+    console.error('Error reading users db:', err);
+  }
+  return {};
+}
+
+function saveUsersDb(db: Record<string, StoredUser>): void {
+  try {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(db, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error saving users db:', err);
+  }
+}
+
+function hashPassword(password: string, salt: string): string {
+  return crypto.scryptSync(password, salt, 32).toString('hex');
+}
+
+// API: Register User with Email, Password & Phone
+app.post('/api/auth/register', (req, res) => {
+  try {
+    const { email, password, phone, displayName } = req.body;
+    if (!email || !password || !phone) {
+      return res.status(400).json({
+        success: false,
+        error: 'يرجى إدخال البريد الإلكتروني، كلمة المرور، ورقم الهاتف كاملة.',
+      });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPhone = phone.trim();
+    const cleanName = (displayName || '').trim() || cleanEmail.split('@')[0];
+
+    const db = getUsersDb();
+    if (db[cleanEmail]) {
+      return res.status(400).json({
+        success: false,
+        error: 'هذا البريد الإلكتروني مسجل مسبقاً! يمكنك تسجيل الدخول مباشرة.',
+      });
+    }
+
+    const salt = crypto.randomBytes(16).toString('hex');
+    const passwordHash = hashPassword(password, salt);
+    const uid = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const now = new Date().toISOString();
+
+    const newUser: StoredUser = {
+      uid,
+      email: cleanEmail,
+      displayName: cleanName,
+      phone: cleanPhone,
+      passwordHash,
+      salt,
+      balance: 10000,
+      trades: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    db[cleanEmail] = newUser;
+    saveUsersDb(db);
+
+    return res.json({
+      success: true,
+      message: 'تم إنشاء الحساب ومزامنته مع السحابة بنجاح.',
+      user: {
+        uid: newUser.uid,
+        email: newUser.email,
+        displayName: newUser.displayName,
+        phone: newUser.phone,
+        balance: newUser.balance,
+        trades: newUser.trades,
+        createdAt: newUser.createdAt,
+        isLoggedIn: true,
+      },
+    });
+  } catch (err: any) {
+    console.error('Registration error:', err);
+    return res.status(500).json({ success: false, error: 'حدث خطأ في الخادم أثناء إنشاء الحساب.' });
+  }
+});
+
+// API: Login User with Email and Password
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'يرجى إدخال البريد الإلكتروني وكلمة المرور.',
+      });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const db = getUsersDb();
+    const user = db[cleanEmail];
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'لم يتم العثور على حساب بهذا البريد الإلكتروني. يرجى إنشاء حساب جديد أولاً.',
+      });
+    }
+
+    const testHash = hashPassword(password, user.salt);
+    if (testHash !== user.passwordHash) {
+      return res.status(401).json({
+        success: false,
+        error: 'كلمة المرور غير صحيحة. يرجى التأكد وإعادة المحاولة.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'تم تسجيل الدخول بنجاح واسترجاع بيانات المحفظة.',
+      user: {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        phone: user.phone,
+        balance: user.balance,
+        trades: user.trades || [],
+        createdAt: user.createdAt,
+        isLoggedIn: true,
+      },
+    });
+  } catch (err: any) {
+    console.error('Login error:', err);
+    return res.status(500).json({ success: false, error: 'حدث خطأ أثناء تسجيل الدخول.' });
+  }
+});
+
+// API: Sync Portfolio, Trades & Balance from Any Device
+app.post('/api/auth/sync', (req, res) => {
+  try {
+    const { email, balance, trades, phone, displayName } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Missing email for sync' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const db = getUsersDb();
+    const user = db[cleanEmail];
+
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found for sync' });
+    }
+
+    if (typeof balance === 'number') {
+      user.balance = balance;
+    }
+    if (Array.isArray(trades)) {
+      user.trades = trades;
+    }
+    if (phone) {
+      user.phone = phone.trim();
+    }
+    if (displayName) {
+      user.displayName = displayName.trim();
+    }
+    user.updatedAt = new Date().toISOString();
+
+    db[cleanEmail] = user;
+    saveUsersDb(db);
+
+    return res.json({
+      success: true,
+      user: {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        phone: user.phone,
+        balance: user.balance,
+        trades: user.trades,
+        updatedAt: user.updatedAt,
+      },
+    });
+  } catch (err: any) {
+    console.error('Sync error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to sync portfolio' });
+  }
+});
+
+// API: Get Latest User Profile & Cloud Data
+app.get('/api/auth/profile', (req, res) => {
+  try {
+    const email = (req.query.email as string || '').trim().toLowerCase();
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email query parameter required' });
+    }
+
+    const db = getUsersDb();
+    const user = db[email];
+
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'Profile not found' });
+    }
+
+    return res.json({
+      success: true,
+      user: {
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        phone: user.phone,
+        balance: user.balance,
+        trades: user.trades || [],
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        isLoggedIn: true,
+      },
+    });
+  } catch (err: any) {
+    console.error('Profile fetch error:', err);
+    return res.status(500).json({ success: false, error: 'Failed to fetch user profile' });
+  }
+});
 
 // ---------------------------------------------------------------------------------
 // API ENDPOINTS

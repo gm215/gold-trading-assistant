@@ -1,0 +1,14 @@
+{
+  "test@example.com": {
+    "uid": "usr_1792765556001_2p8n1",
+    "email": "test@example.com",
+    "displayName": "Test Trader",
+    "phone": "+966501234567",
+    "passwordHash": "63ce0733b93180a2cbce1a9c0fc6c6bf3f2abd1f1c995a9f3c490c0684347211",
+    "salt": "8af1ea3030741c73a3455865cbd25c4e",
+    "balance": 10000,
+    "trades": [],
+    "createdAt": "2026-10-23T14:25:56.001Z",
+    "updatedAt": "2026-10-23T14:25:56.001Z"
+  }
+}
